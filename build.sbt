@@ -70,5 +70,6 @@ lazy val root = project
   )
   .settings(
     name := "reservoir",
+    skip in publish := true,
     mimaFailOnNoPrevious := false,
   )
