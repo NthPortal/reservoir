@@ -26,6 +26,8 @@ inThisBuild(
 )
 
 val sharedSettings = Seq(
+  mimaPreviousArtifacts := Set("0.1.0").map(organization.value %% name.value % _),
+  mimaFailOnNoPrevious := true,
   libraryDependencies ++= Seq(
     "org.scalatest" %% "scalatest" % "3.1.0" % Test,
   ),
@@ -43,8 +45,6 @@ lazy val core = project
   .in(file("core"))
   .settings(
     name := "reservoir-core",
-    mimaPreviousArtifacts := Set(),
-    mimaFailOnNoPrevious := false,
   )
   .settings(sharedSettings)
 
@@ -53,8 +53,6 @@ lazy val akka = project
   .in(file("akka"))
   .settings(
     name := "reservoir-akka",
-    mimaPreviousArtifacts := Set(),
-    mimaFailOnNoPrevious := false,
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-stream" % akkaVersion,
     ),
