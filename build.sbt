@@ -26,7 +26,7 @@ inThisBuild(
 )
 
 val sharedSettings = Seq(
-  mimaPreviousArtifacts := Set("0.1.0").map(organization.value %% name.value % _),
+  mimaPreviousArtifacts := Set("0.1.0", "0.1.1").map(organization.value %% name.value % _),
   mimaFailOnNoPrevious := true,
   libraryDependencies ++= Seq(
     "org.scalatest" %% "scalatest" % "3.1.0" % Test,
