@@ -70,7 +70,7 @@ object Sampler {
    *                      this may be called more than `maxSampleSize` times
    * @tparam A the type of elements being sampled from
    * @tparam B the type of sample elements being stored
-   * @throws IllegalArgumentException if `maxSampleSize` is negative or exceeds VM limit
+   * @throws scala.IllegalArgumentException if `maxSampleSize` is negative or exceeds VM limit
    * @return an [[Sampler.isOpen open]] reservoir sampler
    */
   @throws[IllegalArgumentException]
