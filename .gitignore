@@ -1,0 +1,9 @@
+# IntelliJ
+.idea
+
+# Metals
+.bloop
+.metals
+
+# Build
+target/
