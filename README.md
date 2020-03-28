@@ -1,2 +1,2 @@
 # reservoir
-Reservoir sampling implementation with Akka support
+Reservoir sampling implementation with akka-streams support
