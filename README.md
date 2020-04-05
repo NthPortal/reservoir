@@ -18,3 +18,40 @@ libraryDependencies += "lgbt.princess" %% "reservoir-core" % "0.2.0"
 ```sbtshell
 libraryDependencies += "lgbt.princess" %% "reservoir-akka" % "0.2.0"
 ```
+
+## Usage
+
+### Reservoir Sampler
+
+```scala
+import lgbt.princess.reservoir.Sampler
+
+final case class User(id: String, displayName: String)
+
+val sampler = Sampler[User, String](maxSampleSize = 100)(_.id)
+onlineUsers() foreach sampler.sample
+val sampleIds = sampler.result()
+
+val distinctSampler = Sampler.distinct[User, String](maxSampleSize = 100)(_.id)
+onlineUsers() foreach distinctSampler.sample
+val distinctSampleIds = distinctSampler.result()
+```
+
+### Akka Stream Operator
+
+```scala
+import akka.stream.scaladsl.{Keep, Sink}
+import lgbt.princess.reservoir.akkasupport.Sample
+
+final case class User(id: String, displayName: String)
+
+val (users1, sampleIds) = onlineUsers()
+  .viaMat(Sample[User, String](maxSampleSize = 100)(_.id))(Keep.right)
+  .toMat(Sink.seq)(Keep.both)
+  .run()
+  
+val (users2, distinctSampleIds) = onlineUsers()
+  .viaMat(Sample.distinct[User, String](maxSampleSize = 100)(_.id))(Keep.right)
+  .toMat(Sink.seq)(Keep.both)
+  .run()
+```
