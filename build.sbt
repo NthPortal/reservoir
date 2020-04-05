@@ -29,7 +29,7 @@ val sharedSettings = Seq(
   mimaPreviousArtifacts := Set().map(organization.value %% name.value % _),
   mimaFailOnNoPrevious := false,
   libraryDependencies ++= Seq(
-    "org.scalatest" %% "scalatest" % "3.1.0" % Test,
+    "org.scalatest" %% "scalatest" % "3.1.1" % Test,
   ),
   scalacOptions ++= {
     if (isSnapshot.value) Nil
