@@ -10,11 +10,11 @@ Reservoir sampling implementation with akka-streams support
 **Scala 2.13: core**
 
 ```sbtshell
-libraryDependencies += "lgbt.princess" %% "reservoir-core" % "0.1.1"
+libraryDependencies += "lgbt.princess" %% "reservoir-core" % "0.2.0"
 ```
 
 **Scala 2.13: akka-streams support**
 
 ```sbtshell
-libraryDependencies += "lgbt.princess" %% "reservoir-akka" % "0.1.1"
+libraryDependencies += "lgbt.princess" %% "reservoir-akka" % "0.2.0"
 ```
