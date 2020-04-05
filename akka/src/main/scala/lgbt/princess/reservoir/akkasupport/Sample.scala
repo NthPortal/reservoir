@@ -21,6 +21,9 @@ import scala.reflect.ClassTag
  */
 object Sample {
 
+  private def flow[A, B](newSampler: => Sampler[A, B]): Flow[A, A, Future[IndexedSeq[B]]] =
+    Flow[A].viaMat(new SampleImpl[A, B](newSampler))(Keep.right)
+
   /**
    * Creates a stream operator that samples elements with equal probability,
    * and allows duplicate elements in the sample.
@@ -33,12 +36,45 @@ object Sample {
    * @tparam A the type of elements being sampled from
    * @tparam B the type of sample elements being stored
    * @throws scala.IllegalArgumentException if `maxSampleSize` is negative or exceeds VM limit
+   * @throws scala.NullPointerException     if `map` is `null`
    * @return a stream operator that randomly samples elements of the stream
    */
+  @throws[IllegalArgumentException]
+  @throws[NullPointerException]
   def apply[A, B: ClassTag](maxSampleSize: Int, preAllocate: Boolean = false)(
       map: A => B,
   ): Flow[A, A, Future[IndexedSeq[B]]] = {
-    Sampler.validateParams(maxSampleSize)
-    Flow[A].viaMat(new SampleImpl[A, B](Sampler(maxSampleSize, preAllocate)(map)))(Keep.right)
+    Sampler.validateNonDistinctParams(maxSampleSize, map)
+    flow(Sampler(maxSampleSize, preAllocate)(map))
+  }
+
+  /**
+   * Creates a stream operator that samples distinct values with equal probability;
+   * it does not allow duplicate elements in the sample.
+   *
+   * @param maxSampleSize the maximum number of elements to keep in the sample;
+   *                      if at least this many elements are sampled, this will
+   *                      be the size of the final sample
+   * @param map           a mapping function to apply to elements being sampled;
+   *                      this may be called more than `maxSampleSize` times
+   * @param hash          a function used to hash elements of the sample. By default,
+   *                      [[AnyRef.hashCode() `Object#hashCode()`]] is used, but if
+   *                      `B#hashCode()` does not reliably generate different values
+   *                      for different elements a custom hash function should be
+   *                      provided. Additionally, if a cheaper or higher-granularity
+   *                      hash function exists, that should be used instead.
+   * @tparam A the type of elements being sampled from
+   * @tparam B the type of sample elements being stored
+   * @throws scala.IllegalArgumentException if `maxSampleSize` is negative or exceeds VM limit
+   * @throws scala.NullPointerException     if `map` or `hash` is `null`
+   * @return a stream operator that randomly samples distinct elements of the stream
+   */
+  @throws[IllegalArgumentException]
+  @throws[NullPointerException]
+  def distinct[A, B: ClassTag](
+      maxSampleSize: Int,
+  )(map: A => B, hash: B => Long = Sampler.defaultHashFunction): Flow[A, A, Future[IndexedSeq[B]]] = {
+    Sampler.validateDistinctParams(maxSampleSize, map, hash)
+    flow(Sampler.distinct(maxSampleSize)(map, hash))
   }
 }

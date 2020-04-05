@@ -1,8 +1,10 @@
 package lgbt.princess.reservoir
 
 import scala.collection.immutable.ArraySeq
+import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.Random
+import scala.util.hashing.byteswap64
 
 /**
  * Utility for randomly sampling from a stream of elements, without keeping
@@ -22,8 +24,13 @@ trait Sampler[A, B] {
   /**
    * Sample from another element, probabilistically.
    *
-   * For a sample of size `k` and a total of `n` elements sampled, this element
-   * has a `k/n` chance of being in the final sample.
+   * For a sample of size `k`, a total of `n` elements sampled, if this
+   * sampler allows duplicates, this particular element has a `k/n` chance
+   * of being in the final sample.
+   *
+   * For a sample size of `k`, a total of `n` distinct elements sampled, if
+   * this sampler does not allow duplicates, this distinct value has a `k/n`
+   * chance of being in the final sample.
    */
   def sample(element: A): Unit
 
@@ -46,10 +53,26 @@ object Sampler {
   private final val DefaultInitialSize = 16
   private final val HalfMax            = 1 << 30 // doubling this gives a negative, which is a pain to work with
 
+  private[reservoir] def defaultHashFunction[B]: B => Long = _.hashCode().toLong
+
   @throws[IllegalArgumentException]
-  private[reservoir] def validateParams[A, B](maxSampleSize: Int): Unit = {
+  @throws[NullPointerException]
+  private def validateSharedParams[A, B](maxSampleSize: Int, map: A => B): Unit = {
     require(maxSampleSize <= MaxSize, "maxSampleSize exceeds VM limit")
     require(maxSampleSize > 0, "maxSampleSize must be positive")
+    if (map == null) throw new NullPointerException("`map` cannot be `null`")
+  }
+
+  @throws[IllegalArgumentException]
+  @throws[NullPointerException]
+  private[reservoir] def validateNonDistinctParams[A, B](maxSampleSize: Int, map: A => B): Unit =
+    validateSharedParams(maxSampleSize, map)
+
+  @throws[IllegalArgumentException]
+  @throws[NullPointerException]
+  private[reservoir] def validateDistinctParams[A, B](maxSampleSize: Int, map: A => B, hash: B => Long): Unit = {
+    validateSharedParams(maxSampleSize, map)
+    if (hash == null) throw new NullPointerException("`hash` cannot be `null`")
   }
 
   /**
@@ -71,31 +94,79 @@ object Sampler {
    * @tparam A the type of elements being sampled from
    * @tparam B the type of sample elements being stored
    * @throws scala.IllegalArgumentException if `maxSampleSize` is negative or exceeds VM limit
+   * @throws scala.NullPointerException     if `map` is `null`
    * @return an [[Sampler.isOpen open]] reservoir sampler
    */
   @throws[IllegalArgumentException]
+  @throws[NullPointerException]
   def apply[A, B: ClassTag](maxSampleSize: Int, preAllocate: Boolean = false)(
       map: A => B,
   ): Sampler[A, B] = {
-    validateParams(maxSampleSize)
-    new Impl(maxSampleSize, preAllocate)(map)
+    validateNonDistinctParams(maxSampleSize, map)
+    new RandomElements(maxSampleSize, preAllocate)(map)
   }
 
-  private final class Impl[A, B: ClassTag](maxSampleSize: Int, preAllocate: Boolean)(map: A => B)
-      extends Sampler[A, B] {
+  /**
+   * Creates a [[Sampler reservoir sampler]] that samples distinct values with
+   * equal probability; it does not allow duplicate elements in the sample.
+   *
+   * @note Instances returned by this method are NOT reusable; methods other than
+   *       [[Sampler.isOpen `isOpen`]] MUST NOT be invoked after calling
+   *       [[Sampler.result() `result()`]] once.
+   * @note Instances returned by this method are NOT thread-safe.
+   *
+   * @param maxSampleSize the maximum number of elements to keep in the sample;
+   *                      if at least this many elements are sampled, this will
+   *                      be the size of the final sample
+   * @param map           a mapping function to apply to elements being sampled;
+   *                      this may be called more than `maxSampleSize` times
+   * @param hash          a function used to hash elements of the sample. By default,
+   *                      [[AnyRef.hashCode() `Object#hashCode()`]] is used, but if
+   *                      `B#hashCode()` does not reliably generate different values
+   *                      for different elements a custom hash function should be
+   *                      provided. Additionally, if a cheaper or higher-granularity
+   *                      hash function exists, that should be used instead.
+   * @tparam A the type of elements being sampled from
+   * @tparam B the type of sample elements being stored
+   * @throws scala.IllegalArgumentException if `maxSampleSize` is negative or exceeds VM limit
+   * @throws scala.NullPointerException     if `map` or `hash` is `null`
+   * @return an [[Sampler.isOpen open]] reservoir sampler
+   */
+  @throws[IllegalArgumentException]
+  @throws[NullPointerException]
+  def distinct[A, B: ClassTag](maxSampleSize: Int)(
+      map: A => B,
+      hash: B => Long = defaultHashFunction,
+  ): Sampler[A, B] = {
+    validateDistinctParams(maxSampleSize, map, hash)
+    new RandomValues[A, B](maxSampleSize)(map, hash)
+  }
+
+  private abstract class Base[A, B] extends Sampler[A, B] {
+    private[this] var open: Boolean = true
+
+    protected final def checkOpen(): Unit =
+      if (!open) throw new IllegalStateException("use of sampler after calling `result()`")
+
+    protected final def close(): Unit = {
+      checkOpen()
+      open = false
+    }
+
+    override final def isOpen: Boolean = open
+  }
+
+  private final class RandomElements[A, B: ClassTag](maxSampleSize: Int, preAllocate: Boolean)(map: A => B)
+      extends Base[A, B] {
     private[this] val rand = new Random()
     private[this] var samples =
       if (preAllocate) new Array[B](maxSampleSize)
       else new Array[B](DefaultInitialSize min maxSampleSize)
-    private[this] var open: Boolean         = true
     private[this] var count: Long           = 0
     private[this] var W: Double             = 1.0
     private[this] var nextSampleCount: Long = maxSampleSize
 
     updateNextSampleCount()
-
-    private def checkOpen(): Unit =
-      if (!open) throw new IllegalStateException("use of sampler after calling `result()`")
 
     // we already know the current size is less than `maxSampleSize` before calling this
     private def ensureSize(): Unit =
@@ -144,8 +215,7 @@ object Sampler {
     }
 
     override def result(): IndexedSeq[B] = {
-      checkOpen()
-      open = false
+      close()
       val count = this.count
       val arr =
         if (count >= maxSampleSize) samples
@@ -159,7 +229,42 @@ object Sampler {
       samples = null // allow GC if reference is retained
       ArraySeq.unsafeWrapArray(arr)
     }
+  }
 
-    override def isOpen: Boolean = open
+  private final class RandomValues[A, B: ClassTag](maxSampleSize: Int)(map: A => B, hash: B => Long)
+      extends Base[A, B] {
+    private[this] val (r0, r1) = {
+      val rand = new Random()
+      (rand.nextLong(), rand.nextLong())
+    }
+    private[this] var sample   = mutable.PriorityQueue.empty[(B, Long)](Ordering.by(_._2))
+    private[this] var elements = mutable.Set.empty[B]
+    private[this] var maxHash  = Long.MinValue
+
+    def sample(element: A): Unit = {
+      checkOpen()
+      val elem     = map(element)
+      val elemHash = byteswap64(r1 ^ byteswap64(r0 ^ hash(elem))) // randomly map hash to another value (hopefully)
+      if (sample.size < maxSampleSize) {
+        if (!elements.contains(elem)) {
+          sample += ((elem, elemHash))
+          elements += elem
+          maxHash = maxHash max elemHash
+        }
+      } else if (elemHash < maxHash && !elements.contains(elem)) {
+        elements -= sample.dequeue()._1
+        sample += ((elem, elemHash))
+        elements += elem
+        maxHash = sample.head._2
+      }
+    }
+
+    def result(): IndexedSeq[B] = {
+      close()
+      val res = sample.view.map(_._1).to(ArraySeq)
+      sample = null // allow GC if reference is retained
+      elements = null
+      res
+    }
   }
 }
