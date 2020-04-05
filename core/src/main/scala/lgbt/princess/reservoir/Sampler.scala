@@ -44,6 +44,9 @@ trait Sampler[A, B] {
   /**
    * Whether or not this sampler can still sample elements and return
    * a resulting sample.
+   *
+   * Methods other than this one MUST NOT be called after this method
+   * returns `false`.
    */
   def isOpen: Boolean
 }
@@ -80,8 +83,7 @@ object Sampler {
    * equal probability, and allows duplicate elements in the sample.
    *
    * @note Instances returned by this method are NOT reusable; methods other than
-   *       [[Sampler.isOpen `isOpen`]] MUST NOT be invoked after calling
-   *       [[Sampler.result() `result()`]] once.
+   *       `isOpen` MUST NOT be invoked after calling `result()` once.
    * @note Instances returned by this method are NOT thread-safe.
    *
    * @param maxSampleSize the maximum number of elements to keep in the sample;
@@ -111,8 +113,7 @@ object Sampler {
    * equal probability; it does not allow duplicate elements in the sample.
    *
    * @note Instances returned by this method are NOT reusable; methods other than
-   *       [[Sampler.isOpen `isOpen`]] MUST NOT be invoked after calling
-   *       [[Sampler.result() `result()`]] once.
+   *       `isOpen` MUST NOT be invoked after calling `result()` once.
    * @note Instances returned by this method are NOT thread-safe.
    *
    * @param maxSampleSize the maximum number of elements to keep in the sample;
@@ -121,11 +122,11 @@ object Sampler {
    * @param map           a mapping function to apply to elements being sampled;
    *                      this may be called more than `maxSampleSize` times
    * @param hash          a function used to hash elements of the sample. By default,
-   *                      [[AnyRef.hashCode() `Object#hashCode()`]] is used, but if
-   *                      `B#hashCode()` does not reliably generate different values
-   *                      for different elements a custom hash function should be
-   *                      provided. Additionally, if a cheaper or higher-granularity
-   *                      hash function exists, that should be used instead.
+   *                      `B#hashCode()` is used, but if `B#hashCode()` does not
+   *                      reliably generate different values for different elements,
+   *                      a custom hash function should be provided. Additionally,
+   *                      if a cheaper or higher-granularity hash function exists,
+   *                      that should be used instead.
    * @tparam A the type of elements being sampled from
    * @tparam B the type of sample elements being stored
    * @throws scala.IllegalArgumentException if `maxSampleSize` is negative or exceeds VM limit
