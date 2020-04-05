@@ -39,6 +39,7 @@ val sharedSettings = Seq(
         case _             => Nil
       }
   },
+  autoAPIMappings := true,
 )
 
 lazy val core = project

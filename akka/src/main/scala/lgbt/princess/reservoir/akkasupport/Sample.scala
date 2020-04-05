@@ -58,11 +58,11 @@ object Sample {
    * @param map           a mapping function to apply to elements being sampled;
    *                      this may be called more than `maxSampleSize` times
    * @param hash          a function used to hash elements of the sample. By default,
-   *                      [[AnyRef.hashCode() `Object#hashCode()`]] is used, but if
-   *                      `B#hashCode()` does not reliably generate different values
-   *                      for different elements a custom hash function should be
-   *                      provided. Additionally, if a cheaper or higher-granularity
-   *                      hash function exists, that should be used instead.
+   *                      `B#hashCode()` is used, but if `B#hashCode()` does not
+   *                      reliably generate different values for different elements,
+   *                      a custom hash function should be provided. Additionally,
+   *                      if a cheaper or higher-granularity hash function exists,
+   *                      that should be used instead.
    * @tparam A the type of elements being sampled from
    * @tparam B the type of sample elements being stored
    * @throws scala.IllegalArgumentException if `maxSampleSize` is negative or exceeds VM limit
