@@ -26,10 +26,10 @@ inThisBuild(
 )
 
 val sharedSettings = Seq(
-  mimaPreviousArtifacts := Set().map(organization.value %% name.value % _),
-  mimaFailOnNoPrevious := false,
+  mimaPreviousArtifacts := Set("0.2.0").map(organization.value %% name.value % _),
+  mimaFailOnNoPrevious := true,
   libraryDependencies ++= Seq(
-    "org.scalatest" %% "scalatest" % "3.1.0" % Test,
+    "org.scalatest" %% "scalatest" % "3.1.1" % Test,
   ),
   scalacOptions ++= {
     if (isSnapshot.value) Nil
@@ -49,7 +49,7 @@ lazy val core = project
   )
   .settings(sharedSettings)
 
-val akkaVersion = "2.6.3"
+val akkaVersion = "2.6.4"
 lazy val akka = project
   .in(file("akka"))
   .settings(

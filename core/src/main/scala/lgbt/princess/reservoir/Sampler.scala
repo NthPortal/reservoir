@@ -115,12 +115,15 @@ object Sampler {
    * @note Instances returned by this method are NOT reusable; methods other than
    *       `isOpen` MUST NOT be invoked after calling `result()` once.
    * @note Instances returned by this method are NOT thread-safe.
+   * @note Instances returned by this method are less efficient both in memory and
+   *       CPU than those returned by [[apply]], due to the need to sample distinct
+   *       elements.
    *
    * @param maxSampleSize the maximum number of elements to keep in the sample;
    *                      if at least this many elements are sampled, this will
    *                      be the size of the final sample
    * @param map           a mapping function to apply to elements being sampled;
-   *                      this may be called more than `maxSampleSize` times
+   *                      it is called for each element sampled
    * @param hash          a function used to hash elements of the sample. By default,
    *                      `B#hashCode()` is used, but if `B#hashCode()` does not
    *                      reliably generate different values for different elements,
