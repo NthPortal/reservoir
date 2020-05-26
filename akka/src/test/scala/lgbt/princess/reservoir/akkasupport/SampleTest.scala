@@ -29,8 +29,8 @@ class SampleTest extends AsyncFlatSpec with Matchers with BeforeAndAfterAll {
     system = null
   }
 
-  private def sampleGraph[A: ClassTag](elements: Seq[A], count: Int)(
-      implicit newSampler: NewSampler[A],
+  private def sampleGraph[A: ClassTag](elements: Seq[A], count: Int)(implicit
+      newSampler: NewSampler[A],
   ): RunnableGraph[Future[IndexedSeq[A]]] =
     Source(elements)
       .viaMat(newSampler(maxSampleSize = count))(Keep.right)

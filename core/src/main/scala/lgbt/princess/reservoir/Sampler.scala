@@ -54,7 +54,7 @@ trait Sampler[A, B] {
 object Sampler {
   private final val MaxSize            = Int.MaxValue - 2 // hotspot VM limit for `Array` size
   private final val DefaultInitialSize = 16
-  private final val HalfMax            = 1 << 30 // doubling this gives a negative, which is a pain to work with
+  private final val HalfMax            = 1 << 30          // doubling this gives a negative, which is a pain to work with
 
   private[reservoir] def defaultHashFunction[B]: B => Long = _.hashCode().toLong
 
