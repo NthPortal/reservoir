@@ -121,8 +121,8 @@ class SampleTest extends AsyncFlatSpec with Matchers with BeforeAndAfterAll {
       yield {
         val assertions = it.flatten.toSeq
           .groupMapReduce(identity)(_ => 1)(_ + _)
-          .map {
-            case (_, count) => math.abs(count - expectedElementTimes) should be < significantDifference
+          .map { case (_, count) =>
+            math.abs(count - expectedElementTimes) should be < significantDifference
           }
         assert(assertions.forall(_ == Succeeded))
       }
@@ -188,8 +188,8 @@ class SampleTest extends AsyncFlatSpec with Matchers with BeforeAndAfterAll {
 
         // assert the number of times each pair of elements has the same result
         //   is within reasonable range
-        val assertions = sameSampleResults.map {
-          case (_, count) => math.abs(count - expectedSameTimes) should be < significantDifference
+        val assertions = sameSampleResults.map { case (_, count) =>
+          math.abs(count - expectedSameTimes) should be < significantDifference
         }
         assert(assertions.forall(_ == Succeeded))
       }
