@@ -265,7 +265,7 @@ object Sampler {
 
     def result(): IndexedSeq[B] = {
       close()
-      val res = sample.view.map(_._1).to(ArraySeq)
+      val res = elements to ArraySeq
       sample = null // allow GC if reference is retained
       elements = null
       res
