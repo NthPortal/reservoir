@@ -11,13 +11,15 @@ import scala.util.Random
 class SamplerTest extends AnyFlatSpec with Matchers {
   import SamplerTest._
 
-  def sample[A: ClassTag](elements: Seq[A], sampleSize: Int)(implicit newSampler: NewSampler[A]): IndexedSeq[A] = {
+  private def sample[A: ClassTag](elements: Seq[A], sampleSize: Int)(implicit
+      newSampler: NewSampler[A],
+  ): IndexedSeq[A] = {
     val sampler = newSampler(sampleSize)
     elements foreach sampler.sample
     sampler.result()
   }
 
-  def sampleRepeatedly[A: ClassTag: NewSampler](elements: Seq[A], sampleSize: Int)(
+  private def sampleRepeatedly[A: ClassTag: NewSampler](elements: Seq[A], sampleSize: Int)(
       times: Int,
   ): Iterator[IndexedSeq[A]] =
     Iterator.continually(sample(elements, sampleSize)).take(times)
@@ -169,27 +171,133 @@ class SamplerTest extends AnyFlatSpec with Matchers {
     }
   }
 
-  "a reservoir sampler that allows duplicates" should behave like fairReservoirSampler(Sampler[Int, Int](_)(_))
+  private def singleUseSampler(newSampler: (Int, Int => Int) => Sampler[Int, Int]): Unit = {
+    def mkSampler(): Sampler[Int, Int] = newSampler(10, identity)
 
-  it should "allow duplicate elements" in {
-    val sampler = Sampler[Int, Int](10)(identity)
-    Iterator
-      .continually(1)
-      .take(10)
-      .foreach(sampler.sample)
-    sampler.result() shouldEqual Seq.fill(10)(1)
+    it should "throw if `sample(...)` is called after `result()`" in {
+      val sampler = mkSampler()
+      sampler.result()
+      an[IllegalStateException] should be thrownBy sampler.sample(1)
+    }
+
+    it should "throw if `result()` is called after `result()`" in {
+      val sampler = mkSampler()
+      sampler.result()
+      an[IllegalStateException] should be thrownBy sampler.result()
+    }
+
+    it should "be open before `result()`" in {
+      val sampler = mkSampler()
+      sampler.isOpen shouldBe true
+    }
+
+    it should "not be open after `result()`" in {
+      val sampler = mkSampler()
+      sampler.result()
+      sampler.isOpen shouldBe false
+    }
   }
 
-  "a reservoir sampler of distinct values" should behave like fairReservoirSampler(Sampler.distinct[Int, Int](_)(_))
+  private def reusableSampler(newSampler: (Int, Int => Int) => Sampler[Int, Int]): Unit = {
+    def mkSampler(): Sampler[Int, Int] = newSampler(64, identity)
 
-  it should "not allow duplicate elements" in {
-    val sampler = Sampler.distinct[Int, Int](10)(identity)
-    Iterator
-      .continually(1)
-      .take(10)
-      .foreach(sampler.sample)
-    sampler.result() shouldEqual Seq(1)
+    it should "allow calling `sample(...)` after `result()`" in {
+      val sampler = mkSampler()
+      sampler.result()
+      noException should be thrownBy sampler.sample(1)
+    }
+
+    it should "throw if `result()` is called after `result()`" in {
+      val sampler = mkSampler()
+      sampler.result()
+      noException should be thrownBy sampler.result()
+    }
+
+    it should "always be open" in {
+      val sampler = mkSampler()
+      sampler.isOpen shouldBe true
+      sampler.result()
+      sampler.isOpen shouldBe true
+    }
+
+    it should "not clobber previous results" in {
+      val sampler = mkSampler()
+      def results(): (IndexedSeq[Int], IndexedSeq[Int], List[Int]) = {
+        val res  = sampler.result()
+        val list = res.toList
+        (res, sampler.result(), list)
+      }
+
+      val (res1a, res1b, v1) = results()
+      (1 to 32) foreach sampler.sample
+      val (res2a, res2b, v2) = results()
+      (33 to 64) foreach sampler.sample
+      val (res3a, res3b, v3) = results()
+      (65 to 128) foreach sampler.sample
+      val (res4a, res4b, v4) = results()
+
+      res1a shouldEqual res1b
+      res1a shouldEqual v1
+      res2a shouldEqual res2b
+      res2a shouldEqual v2
+      res3a shouldEqual res3b
+      res3a shouldEqual v3
+      res4a shouldEqual res4b
+      res4a shouldEqual v4
+    }
   }
+
+  private def elementSampler(newSampler: (Int, Int => Int) => Sampler[Int, Int]): Unit = {
+    it should "allow duplicate elements" in {
+      val sampler = newSampler(10, identity)
+      Iterator
+        .continually(1)
+        .take(10)
+        .foreach(sampler.sample)
+      sampler.result() shouldEqual Seq.fill(10)(1)
+    }
+  }
+
+  private def distinctValueSampler(newSampler: (Int, Int => Int) => Sampler[Int, Int]): Unit = {
+    it should "not allow duplicate elements" in {
+      val sampler = newSampler(10, identity)
+      Iterator
+        .continually(1)
+        .take(10)
+        .foreach(sampler.sample)
+      sampler.result() shouldEqual Seq(1)
+    }
+  }
+
+  behavior of "a single-use reservoir sampler allowing duplicates"
+  it should behave like fairReservoirSampler(Sampler[Int, Int](_)(_))
+  it should behave like singleUseSampler(Sampler[Int, Int](_)(_))
+  it should behave like elementSampler(Sampler[Int, Int](_)(_))
+
+  behavior of "a single-use reservoir sampler allowing duplicates (pre-allocating)"
+  it should behave like fairReservoirSampler(Sampler[Int, Int](_)(_))
+  it should behave like singleUseSampler(Sampler[Int, Int](_)(_))
+  it should behave like elementSampler(Sampler[Int, Int](_)(_))
+
+  behavior of "a reusable reservoir sampler allowing duplicates"
+  it should behave like fairReservoirSampler(Sampler[Int, Int](_, reusable = true)(_))
+  it should behave like reusableSampler(Sampler[Int, Int](_, reusable = true)(_))
+  it should behave like elementSampler(Sampler[Int, Int](_, reusable = true)(_))
+
+  behavior of "a reusable reservoir sampler allowing duplicates (pre-allocating)"
+  it should behave like fairReservoirSampler(Sampler[Int, Int](_, preAllocate = true, reusable = true)(_))
+  it should behave like reusableSampler(Sampler[Int, Int](_, preAllocate = true, reusable = true)(_))
+  it should behave like elementSampler(Sampler[Int, Int](_, preAllocate = true, reusable = true)(_))
+
+  behavior of "a single-use reservoir sampler of distinct values"
+  it should behave like fairReservoirSampler(Sampler.distinct[Int, Int](_)(_))
+  it should behave like singleUseSampler(Sampler.distinct[Int, Int](_)(_))
+  it should behave like distinctValueSampler(Sampler.distinct[Int, Int](_)(_))
+
+  behavior of "a reusable reservoir sampler of distinct values"
+  it should behave like fairReservoirSampler(Sampler.distinct[Int, Int](_, reusable = true)(_))
+  it should behave like reusableSampler(Sampler.distinct[Int, Int](_, reusable = true)(_))
+  it should behave like distinctValueSampler(Sampler.distinct[Int, Int](_, reusable = true)(_))
 }
 
 private object SamplerTest {

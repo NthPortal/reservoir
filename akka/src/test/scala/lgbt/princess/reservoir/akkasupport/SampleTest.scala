@@ -204,21 +204,31 @@ class SampleTest extends AsyncFlatSpec with Matchers with BeforeAndAfterAll {
     }
   }
 
-  "a sampling operator that allows duplicates" should behave like fairSamplingOperator(Sample[Int, Int](_)(_))
+  private def elementSampler(newSampler: (Int, Int => Int) => Flow[Int, Int, Future[IndexedSeq[Int]]]): Unit = {
+    def mkSampler(): Flow[Int, Int, Future[IndexedSeq[Int]]] = newSampler(10, identity)
 
-  it should "allow duplicate elements" in {
-    val future = Source
-      .fromIterator(() => Iterator.continually(1))
-      .take(10)
-      .viaMat(Sample[Int, Int](10)(identity))(Keep.right)
-      .to(Sink.ignore)
-      .run()
+    it should "allow duplicate elements" in {
+      val future = Source
+        .fromIterator(() => Iterator.continually(1))
+        .take(10)
+        .viaMat(mkSampler())(Keep.right)
+        .to(Sink.ignore)
+        .run()
 
-    for (sample <- future) yield sample shouldEqual Seq.fill(10)(1)
+      for (sample <- future) yield sample shouldEqual Seq.fill(10)(1)
+    }
   }
 
-  "a sampling operator of distinct values" should behave like fairSamplingOperator(Sample.distinct[Int, Int](_)(_))
+  behavior of "a sampling operator that allows duplicates"
+  it should behave like fairSamplingOperator(Sample[Int, Int](_)(_))
+  it should behave like elementSampler(Sample[Int, Int](_)(_))
 
+  behavior of "a sampling operator that allows duplicates (pre-allocating)"
+  it should behave like fairSamplingOperator(Sample[Int, Int](_, preAllocate = true)(_))
+  it should behave like elementSampler(Sample[Int, Int](_, preAllocate = true)(_))
+
+  behavior of "a sampling operator of distinct values"
+  it should behave like fairSamplingOperator(Sample.distinct[Int, Int](_)(_))
   it should "not allow duplicate elements" in {
     val future = Source
       .fromIterator(() => Iterator.continually(1))
