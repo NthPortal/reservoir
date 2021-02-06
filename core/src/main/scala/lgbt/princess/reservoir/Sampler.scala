@@ -12,8 +12,10 @@ import scala.util.hashing.byteswap64
  * [[https://en.wikipedia.org/wiki/Reservoir_sampling reservoir sampling]].
  *
  * @note Instances of this type are NOT reusable unless otherwise specified;
- *       methods other than `isOpen` MUST NOT be invoked after calling
- *       `result()` once.
+ *       that is, methods other than `isOpen` MUST NOT be invoked after calling
+ *       `result()` once unless otherwise specified. Reusable instances may
+ *       leak memory if you retain references to them after you are finished
+ *       using them.
  * @note Instances of this type are NOT thread-safe unless otherwise specified.
  *
  * @tparam A the type of elements being sampled from
@@ -32,13 +34,15 @@ trait Sampler[A, B] {
    * this sampler does not allow duplicates, this distinct value has a `k/n`
    * chance of being in the final sample.
    */
+  @throws[IllegalStateException]
   def sample(element: A): Unit
 
   /**
    * @note methods other than [[isOpen]] (including this one) MUST NOT
-   *       be called after calling this method once.
+   *       be called after calling this method once unless otherwise specified.
    * @return the sampled elements
    */
+  @throws[IllegalStateException]
   def result(): IndexedSeq[B]
 
   /**
@@ -91,6 +95,10 @@ object Sampler {
    *                      be the size of the final sample
    * @param preAllocate   whether or not to pre-allocate space for the
    *                      maximum number of sampled elements
+   * @param reusable      whether or not the returned instance should support
+   *                      further calls to [[Sampler.sample `sample(...)`]] and
+   *                      [[Sampler.result `result()`]] after calling `result()`
+   *                      once
    * @param map           a mapping function to apply to elements being sampled;
    *                      this may be called more than `maxSampleSize` times
    * @tparam A the type of elements being sampled from
@@ -101,19 +109,18 @@ object Sampler {
    */
   @throws[IllegalArgumentException]
   @throws[NullPointerException]
-  def apply[A, B: ClassTag](maxSampleSize: Int, preAllocate: Boolean = false)(
+  def apply[A, B: ClassTag](maxSampleSize: Int, preAllocate: Boolean = false, reusable: Boolean = false)(
       map: A => B,
   ): Sampler[A, B] = {
     validateNonDistinctParams(maxSampleSize, map)
-    new RandomElements(maxSampleSize, preAllocate)(map)
+    if (reusable) new MultiResultRandomElements[A, B](maxSampleSize, preAllocate)(map)
+    else new SingleUseRandomElements[A, B](maxSampleSize, preAllocate)(map)
   }
 
   /**
    * Creates a [[Sampler reservoir sampler]] that samples distinct values with
    * equal probability; it does not allow duplicate elements in the sample.
    *
-   * @note Instances returned by this method are NOT reusable; methods other than
-   *       `isOpen` MUST NOT be invoked after calling `result()` once.
    * @note Instances returned by this method are NOT thread-safe.
    * @note Instances returned by this method are less efficient both in memory and
    *       CPU than those returned by [[apply]], due to the need to sample distinct
@@ -122,6 +129,10 @@ object Sampler {
    * @param maxSampleSize the maximum number of elements to keep in the sample;
    *                      if at least this many elements are sampled, this will
    *                      be the size of the final sample
+   * @param reusable      whether or not the returned instance should support
+   *                      further calls to [[Sampler.sample `sample(...)`]] and
+   *                      [[Sampler.result `result()`]] after calling `result()`
+   *                      once
    * @param map           a mapping function to apply to elements being sampled;
    *                      it is called for each element sampled
    * @param hash          a function used to hash elements of the sample. By default,
@@ -138,15 +149,16 @@ object Sampler {
    */
   @throws[IllegalArgumentException]
   @throws[NullPointerException]
-  def distinct[A, B: ClassTag](maxSampleSize: Int)(
+  def distinct[A, B: ClassTag](maxSampleSize: Int, reusable: Boolean = false)(
       map: A => B,
       hash: B => Long = defaultHashFunction,
   ): Sampler[A, B] = {
     validateDistinctParams(maxSampleSize, map, hash)
-    new RandomValues[A, B](maxSampleSize)(map, hash)
+    if (reusable) new MultiResultRandomValues[A, B](maxSampleSize)(map, hash)
+    else new SingleUseRandomValues[A, B](maxSampleSize)(map, hash)
   }
 
-  private abstract class Base[A, B] extends Sampler[A, B] {
+  private sealed trait SingleUse { self: Sampler[_, _] =>
     private[this] var open: Boolean = true
 
     protected final def checkOpen(): Unit =
@@ -160,10 +172,11 @@ object Sampler {
     override final def isOpen: Boolean = open
   }
 
-  private final class RandomElements[A, B: ClassTag](maxSampleSize: Int, preAllocate: Boolean)(map: A => B)
-      extends Base[A, B] {
+  private sealed abstract class RandomElements[A, B: ClassTag](maxSampleSize: Int, preAllocate: Boolean)(
+      map: A => B,
+  ) extends Sampler[A, B] {
     private[this] val rand = new Random()
-    private[this] var samples =
+    protected[this] var samples: Array[B] =
       if (preAllocate) new Array[B](maxSampleSize)
       else new Array[B](DefaultInitialSize min maxSampleSize)
     private[this] var count: Long           = 0
@@ -173,7 +186,7 @@ object Sampler {
     updateNextSampleCount()
 
     // we already know the current size is less than `maxSampleSize` before calling this
-    private def ensureSize(): Unit =
+    private[this] def ensureSize(): Unit =
       if (!preAllocate) {
         val currentSamples = samples
         val currentSize    = currentSamples.length
@@ -191,7 +204,7 @@ object Sampler {
     //   a previous element. The value computed by this method is not used until
     //   the initial sample is full.
     // Implements Algorithm L from https://en.wikipedia.org/wiki/Reservoir_sampling#An_optimal_algorithm
-    private def updateNextSampleCount(): Unit = {
+    private[this] def updateNextSampleCount(): Unit = {
       import java.lang.Math._
 
       val rand = this.rand
@@ -201,8 +214,7 @@ object Sampler {
       nextSampleCount = nextSampleCount + floor(log(rand.nextDouble()) / log(1.0 - W)).toLong + 1L
     }
 
-    override def sample(element: A): Unit = {
-      checkOpen()
+    protected[this] def sampleImpl(element: A): Unit = {
       val count = this.count + 1
       this.count = count
       val maxSampleSize = this.maxSampleSize
@@ -218,57 +230,115 @@ object Sampler {
       }
     }
 
-    override def result(): IndexedSeq[B] = {
-      close()
-      val count = this.count
+    protected[this] def resultImpl: ArraySeq[B] = {
+      val count    = this.count
+      val _samples = samples
       val arr =
-        if (count >= maxSampleSize) samples
+        if (count >= _samples.length) _samples
         else {
-          // safe because `count < maxSampleSize`, and `maxSampleSize` is an `Int`
+          // safe because `count < samples.size`, and Array sizes are `Int`s
           val size = count.toInt
           val res  = new Array[B](size)
-          System.arraycopy(samples, 0, res, 0, size)
+          System.arraycopy(_samples, 0, res, 0, size)
           res
         }
-      samples = null // allow GC if reference is retained
       ArraySeq.unsafeWrapArray(arr)
     }
   }
 
-  private final class RandomValues[A, B: ClassTag](maxSampleSize: Int)(map: A => B, hash: B => Long)
-      extends Base[A, B] {
+  private final class SingleUseRandomElements[A, B: ClassTag](maxSampleSize: Int, preAllocate: Boolean)(map: A => B)
+      extends RandomElements[A, B](maxSampleSize, preAllocate)(map)
+      with SingleUse {
+    def sample(element: A): Unit = {
+      checkOpen()
+      sampleImpl(element)
+    }
+    def result(): IndexedSeq[B] = {
+      close()
+      val res = resultImpl
+      samples = null // allow GC if reference is retained
+      res
+    }
+  }
+
+  private final class MultiResultRandomElements[A, B: ClassTag](maxSampleSize: Int, preAllocate: Boolean)(map: A => B)
+      extends RandomElements[A, B](maxSampleSize, preAllocate)(map) {
+    private[this] var aliased: Boolean = false
+
+    private[this] def ensureUnaliased(): Unit =
+      if (aliased) {
+        val _samples = samples
+        val len      = _samples.length
+        val copy     = new Array[B](len)
+        System.arraycopy(_samples, 0, copy, 0, len)
+        samples = copy
+        aliased = false
+      }
+
+    def sample(element: A): Unit = {
+      ensureUnaliased()
+      sampleImpl(element)
+    }
+
+    def result(): IndexedSeq[B] = {
+      val res = resultImpl
+      if (res.unsafeArray eq samples) aliased = true
+      res
+    }
+
+    def isOpen: Boolean = true
+  }
+
+  private sealed abstract class RandomValues[A, B: ClassTag](maxSampleSize: Int)(map: A => B, hash: B => Long)
+      extends Sampler[A, B] {
     private[this] val (r0, r1) = {
       val rand = new Random()
       (rand.nextLong(), rand.nextLong())
     }
-    private[this] var sample   = mutable.PriorityQueue.empty[(B, Long)](Ordering.by(_._2))
-    private[this] var elements = mutable.Set.empty[B]
-    private[this] var maxHash  = Long.MinValue
+    protected[this] var samples: mutable.PriorityQueue[(B, Long)] =
+      mutable.PriorityQueue.empty[(B, Long)](Ordering.by(_._2))
+    protected[this] var elements: mutable.Set[B] = mutable.Set.empty
+    private[this] var maxHash                    = Long.MinValue
 
     def sample(element: A): Unit = {
-      checkOpen()
       val elem     = map(element)
       val elemHash = byteswap64(r1 ^ byteswap64(r0 ^ hash(elem))) // randomly map hash to another value (hopefully)
-      if (sample.size < maxSampleSize) {
+      if (samples.size < maxSampleSize) {
         if (!elements.contains(elem)) {
-          sample += ((elem, elemHash))
+          samples += ((elem, elemHash))
           elements += elem
           maxHash = maxHash max elemHash
         }
       } else if (elemHash < maxHash && !elements.contains(elem)) {
-        elements -= sample.dequeue()._1
-        sample += ((elem, elemHash))
+        elements -= samples.dequeue()._1
+        samples += ((elem, elemHash))
         elements += elem
-        maxHash = sample.head._2
+        maxHash = samples.head._2
       }
     }
 
-    def result(): IndexedSeq[B] = {
+    def result(): IndexedSeq[B] = elements to ArraySeq
+  }
+
+  private final class SingleUseRandomValues[A, B: ClassTag](maxSampleSize: Int)(map: A => B, hash: B => Long)
+      extends RandomValues[A, B](maxSampleSize)(map, hash)
+      with SingleUse {
+    override def sample(element: A): Unit = {
+      checkOpen()
+      super.sample(element)
+    }
+
+    override def result(): IndexedSeq[B] = {
       close()
-      val res = elements to ArraySeq
-      sample = null // allow GC if reference is retained
+      val res = super.result()
+      samples = null // allow GC if reference is retained
       elements = null
       res
     }
+  }
+
+  private final class MultiResultRandomValues[A, B: ClassTag](maxSampleSize: Int)(map: A => B, hash: B => Long)
+      extends RandomValues[A, B](maxSampleSize)(map, hash) {
+    def isOpen: Boolean = true
   }
 }

@@ -45,7 +45,7 @@ object Sample {
       map: A => B,
   ): Flow[A, A, Future[IndexedSeq[B]]] = {
     Sampler.validateNonDistinctParams(maxSampleSize, map)
-    flow(Sampler(maxSampleSize, preAllocate)(map))
+    flow(Sampler(maxSampleSize, preAllocate = preAllocate)(map))
   }
 
   /**
