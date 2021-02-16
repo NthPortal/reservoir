@@ -3,13 +3,55 @@ package lgbt.princess.reservoir
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
+import java.lang.reflect.Field
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 import scala.reflect.ClassTag
 import scala.util.Random
 
 class SamplerTest extends AnyFlatSpec with Matchers {
   import SamplerTest._
+
+  private def useConsistentRandom[A](sampler: Sampler[A, A]): sampler.type = {
+    val clazz = sampler.getClass.getSuperclass // brittle, I know
+    def getFieldAccessible(name: String): Field = {
+      val field = clazz.getDeclaredField(name)
+      field.setAccessible(true)
+      field
+    }
+    def setField[B](name: String)(value: B)(doSet: (Field, Sampler[A, A], B) => Unit): Unit =
+      doSet(getFieldAccessible(name), sampler, value)
+    def getField[R](name: String)(doGet: (Field, Sampler[A, A]) => R): R =
+      doGet(getFieldAccessible(name), sampler)
+
+    try {
+      setField("rand")(fixedRandom)(_.set(_, _))
+      setField("W")(1.0)(_.setDouble(_, _))
+      val maxSize = getField("maxSampleSize")(_.getInt(_))
+      setField("nextSampleCount")(maxSize)(_.setInt(_, _))
+
+      val updateMethod = clazz.getDeclaredMethod("updateNextSampleCount")
+      updateMethod.setAccessible(true)
+      updateMethod.invoke(sampler)
+    } catch {
+      case e1: NoSuchFieldException =>
+        try {
+          val rand = fixedRandom
+          setField("r0")(rand.nextLong())(_.setLong(_, _))
+          setField("r1")(rand.nextLong())(_.setLong(_, _))
+        } catch {
+          case e2: NoSuchFieldException =>
+            val baseMsg      = s"unable to reflect consistent Random for ${sampler.getClass} with parent $clazz"
+            val classFields  = sampler.getClass.getDeclaredFields.mkString("class fields are:\n\t", "\n\t", "")
+            val parentFields = clazz.getDeclaredFields.mkString("parent fields are:\n\t", "\n\t", "")
+            val ex           = new Exception(s"$baseMsg\n$classFields\n$parentFields", e2)
+            ex.addSuppressed(e1)
+            throw ex
+        }
+    }
+    sampler
+  }
 
   private def sample[A: ClassTag](elements: Seq[A], sampleSize: Int)(implicit
       newSampler: NewSampler[A],
@@ -70,6 +112,33 @@ class SamplerTest extends AnyFlatSpec with Matchers {
     it should "not always sample elements further past maxSampleSize" in {
       val samples = sampleRepeatedly(1 to 6, 4)(200)
       assert(samples.exists(!_.contains(6)))
+    }
+
+    it should "produce the same results with `sample` and `sampleAll`" in {
+      def mkConsistentSampler = useConsistentRandom(mkSampler(20))
+      val s1                  = mkConsistentSampler
+      val s2                  = mkConsistentSampler
+      val s3                  = mkConsistentSampler
+      val s4                  = mkConsistentSampler
+
+      (1 to 3000) foreach s1.sample
+      // `Range` is an `IndexedSeq`, and has `knownSize`
+      // `ListBuffer` is not an `IndexedSeq`, and has `knownSize`
+      // `List` is not an `IndexedSeq` and does not have `knownSize`
+      s2.sampleAll(1 to 1000)
+      s2.sampleAll(1001 to 2000 to ListBuffer)
+      s2.sampleAll(2001 to 3000 to List)
+      s3.sampleAll(1 to 1000 to ListBuffer)
+      s3.sampleAll(1001 to 2000 to List)
+      s3.sampleAll(2001 to 3000)
+      s4.sampleAll(1 to 1000 to List)
+      s4.sampleAll(1001 to 2000 to ListBuffer)
+      s4.sampleAll(2001 to 3000)
+
+      val baseline = s1.result()
+      s2.result() shouldEqual baseline
+      s3.result() shouldEqual baseline
+      s4.result() shouldEqual baseline
     }
 
     // A given element has a `1/2` chance of being sampled each time; thus, the
@@ -301,6 +370,9 @@ class SamplerTest extends AnyFlatSpec with Matchers {
 }
 
 private object SamplerTest {
+  def newRandom: Random   = new Random()
+  def fixedRandom: Random = new Random(0L)
+
   trait NewSampler[A] {
     def apply(maxSampleSize: Int): Sampler[A, A]
   }
