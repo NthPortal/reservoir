@@ -1,5 +1,6 @@
 package lgbt.princess.reservoir
 
+import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -26,16 +27,30 @@ trait Sampler[A, B] {
   /**
    * Sample from another element, probabilistically.
    *
-   * For a sample of size `k`, a total of `n` elements sampled, if this
-   * sampler allows duplicates, this particular element has a `k/n` chance
+   * For a sample of size `k`, a total of `n` elements already sampled, if
+   * this sampler allows duplicates, this particular element has a `k/n` chance
    * of being in the final sample.
    *
-   * For a sample size of `k`, a total of `n` distinct elements sampled, if
-   * this sampler does not allow duplicates, this distinct value has a `k/n`
+   * For a sample size of `k`, a total of `n` distinct elements already sampled,
+   * if this sampler does not allow duplicates, this distinct value has a `k/n`
    * chance of being in the final sample.
    */
   @throws[IllegalStateException]
   def sample(element: A): Unit
+
+  /**
+   * Sample each of the elements in a collection, probabilistically.
+   *
+   * For a sample of size `k`, a total of `n` elements  already sampled, if
+   * this sampler allows duplicates, the next element sampled has a `k/n` chance
+   * of being in the final sample.
+   *
+   * For a sample size of `k`, a total of `n` distinct elements already sampled,
+   * if this sampler does not allow duplicates, the next distinct value has a `k/n`
+   * chance of being in the final sample.
+   */
+  @throws[IllegalStateException]
+  def sampleAll(elements: IterableOnce[A]): Unit = elements.iterator foreach sample
 
   /**
    * @note methods other than [[isOpen]] (including this one) MUST NOT
@@ -186,11 +201,11 @@ object Sampler {
     updateNextSampleCount()
 
     // we already know the current size is less than `maxSampleSize` before calling this
-    private[this] def ensureSize(): Unit =
+    private[this] def ensureSize(count: Int): Unit =
       if (!preAllocate) {
         val currentSamples = samples
         val currentSize    = currentSamples.length
-        if (currentSize < count) {
+        if (currentSize <= count) {
           val newSize =
             if (currentSize >= HalfMax) maxSampleSize // `currentSize << 1` is negative, so can't do `min`
             else (currentSize << 1) min maxSampleSize
@@ -214,23 +229,87 @@ object Sampler {
       nextSampleCount = nextSampleCount + floor(log(rand.nextDouble()) / log(1.0 - W)).toLong + 1L
     }
 
-    protected[this] def sampleImpl(element: A): Unit = {
-      val count = this.count + 1
-      this.count = count
+    private[this] def sampleAndAppend(idx: Int)(element: A): Unit = {
+      ensureSize(idx)
+      samples(idx) = map(element)
+    }
+
+    private[this] def sampleWithEviction(element: A): Unit = {
+      samples(rand.nextInt(maxSampleSize)) = map(element)
+      updateNextSampleCount()
+    }
+
+    protected[this] final def sampleImpl(element: A): Unit = {
+      val prevCount = this.count
+      val newCount  = prevCount + 1
+      this.count = newCount
       val maxSampleSize = this.maxSampleSize
-      if (count <= maxSampleSize) { // haven't sampled enough elements yet - just append
-        ensureSize()
-        // safe because `count <= maxSampleSize`, and `maxSampleSize` is an `Int`
-        samples(count.toInt - 1) = map(element)
+      if (newCount <= maxSampleSize) { // haven't sampled enough elements yet - just append
+        // safe because `prevCount < maxSampleSize`, and `maxSampleSize` is an `Int`
+        sampleAndAppend(prevCount.toInt)(element)
       } else { // have sampled enough elements, so evict probabilistically
-        if (count >= nextSampleCount) {
-          samples(rand.nextInt(maxSampleSize)) = map(element)
-          updateNextSampleCount()
+        if (newCount >= nextSampleCount) sampleWithEviction(element)
+      }
+    }
+
+    @tailrec private[this] def sampleIndexed(seq: collection.IndexedSeq[A], start: Int, len: Int, cnt: Long): Unit = {
+      if (len > 0) {
+        val nextSampleCount = this.nextSampleCount
+        val nextIdxOffset   = nextSampleCount - cnt
+        if (len >= nextIdxOffset) {
+          // safe because `nextIdxOffset <= len`, and `len` is an `Int`
+          val offsetInt = nextIdxOffset.toInt
+          val nextStart = start + offsetInt
+          sampleWithEviction(seq(nextStart - 1))
+          sampleIndexed(seq, nextStart, len - offsetInt, nextSampleCount)
         }
       }
     }
 
-    protected[this] def resultImpl: ArraySeq[B] = {
+    @tailrec private[this] def sampleIterator(dropFromIt: Iterator[A], len: Int, cnt: Long): Unit = {
+      if (len > 0) {
+        val nextSampleCount = this.nextSampleCount
+        val nextIdxOffset   = nextSampleCount - cnt
+        if (len >= nextIdxOffset) {
+          // safe because `nextIdxOffset <= len`, and `len` is an `Int`
+          val offsetInt = nextIdxOffset.toInt
+          val it        = dropFromIt.drop(offsetInt - 1)
+          sampleWithEviction(it.next())
+          sampleIterator(it, len - offsetInt, nextSampleCount)
+        }
+      }
+    }
+
+    protected[this] final def sampleAllImpl(elements: IterableOnce[A]): Unit = {
+      val ks = elements.knownSize
+      if (ks > 0) {
+        val startCount      = this.count
+        val maxSampleSize   = this.maxSampleSize
+        var i               = 0
+        var it: Iterator[A] = null
+        if (startCount < maxSampleSize) { // haven't sampled enough elements yet - just append
+          // safe because `startCount < maxSampleSize`, and `maxSampleSize` is an `Int`
+          var count = startCount.toInt
+          it = elements.iterator
+          while (count < maxSampleSize && it.hasNext) {
+            sampleAndAppend(count)(it.next())
+            count += 1
+            i += 1
+          }
+        }
+        elements match {
+          case seq: collection.IndexedSeq[A] => sampleIndexed(seq, start = i, len = ks - i, cnt = startCount + i)
+          case _ =>
+            if (it == null) it = elements.iterator
+            sampleIterator(it, len = ks - i, cnt = startCount + i)
+        }
+        this.count = startCount + ks
+      } else if (ks < 0) {
+        elements.iterator foreach sampleImpl
+      }
+    }
+
+    protected[this] final def resultImpl: ArraySeq[B] = {
       val count    = this.count
       val _samples = samples
       val arr =
@@ -252,6 +331,10 @@ object Sampler {
     def sample(element: A): Unit = {
       checkOpen()
       sampleImpl(element)
+    }
+    override def sampleAll(elements: IterableOnce[A]): Unit = {
+      checkOpen()
+      sampleAllImpl(elements)
     }
     def result(): IndexedSeq[B] = {
       close()
@@ -279,13 +362,15 @@ object Sampler {
       ensureUnaliased()
       sampleImpl(element)
     }
-
+    override def sampleAll(elements: IterableOnce[A]): Unit = {
+      ensureUnaliased()
+      sampleAllImpl(elements)
+    }
     def result(): IndexedSeq[B] = {
       val res = resultImpl
       if (res.unsafeArray eq samples) aliased = true
       res
     }
-
     def isOpen: Boolean = true
   }
 
@@ -327,7 +412,6 @@ object Sampler {
       checkOpen()
       super.sample(element)
     }
-
     override def result(): IndexedSeq[B] = {
       close()
       val res = super.result()
