@@ -148,7 +148,7 @@ val akkaVersion = "2.6.13"
 lazy val akka = project
   .in(file("akka"))
   .settings(
-    name := "reservoir-akka",
+    name := "reservoir-akka-stream",
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-stream" % akkaVersion,
     ),
