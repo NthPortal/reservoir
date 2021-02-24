@@ -162,8 +162,16 @@ lazy val root = project
     core,
     akka,
   )
+  .dependsOn(
+    core,
+    akka,
+  )
   .settings(
     name := "reservoir",
-    skip in publish := true,
-    mimaFailOnNoPrevious := false,
+    mimaPreviousArtifacts := Set().map(organization.value %% name.value % _),
+    mimaFailOnNoPrevious := true,
+    Compile / doc / sources :=
+      (Compile / doc / sources).value ++
+        (core / Compile / doc / sources).value ++
+        (akka / Compile / doc / sources).value,
   )
