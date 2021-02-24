@@ -48,7 +48,7 @@ class SampleTest extends AsyncFlatSpec with Matchers with BeforeAndAfterAll {
 
   private def fairSamplingOperator(newSampler: (Int, Int => Int) => Flow[Int, Int, Future[IndexedSeq[Int]]]): Unit = {
     def mkSampler(maxSampleSize: Int): Flow[Int, Int, Future[IndexedSeq[Int]]] = newSampler(maxSampleSize, identity)
-    implicit val ns: NewSampler[Int]                                           = mkSampler
+    implicit val ns: NewSampler[Int]                                           = mkSampler(_)
 
     it should "not allow negative sample sizes" in {
       an[IllegalArgumentException] should be thrownBy mkSampler(maxSampleSize = -1)

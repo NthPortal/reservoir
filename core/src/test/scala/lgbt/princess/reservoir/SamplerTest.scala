@@ -14,7 +14,7 @@ class SamplerTest extends AnyFlatSpec with Matchers {
   import SamplerTest._
 
   private def useConsistentRandom[A](sampler: Sampler[A, A]): sampler.type = {
-    val clazz = sampler.getClass.getSuperclass // brittle, I know
+    val clazz: Class[_] = sampler.getClass.getSuperclass // brittle, I know
     def getFieldAccessible(name: String): Field = {
       val field = clazz.getDeclaredField(name)
       field.setAccessible(true)
@@ -68,7 +68,7 @@ class SamplerTest extends AnyFlatSpec with Matchers {
 
   private def fairReservoirSampler(newSampler: (Int, Int => Int) => Sampler[Int, Int]): Unit = {
     def mkSampler(maxSampleSize: Int): Sampler[Int, Int] = newSampler(maxSampleSize, identity)
-    implicit val ns: NewSampler[Int]                     = mkSampler
+    implicit val ns: NewSampler[Int]                     = mkSampler(_)
 
     it should "not allow negative sample sizes" in {
       an[IllegalArgumentException] should be thrownBy mkSampler(maxSampleSize = -1)

@@ -126,6 +126,11 @@ val sharedSettings = Seq(
   libraryDependencies ++= Seq(
     "org.scalatest" %% "scalatest" % "3.2.5" % Test,
   ),
+  scalacOptions ++= Seq(
+    "-Xlint",
+    "-feature",
+    "-Werror",
+  ),
   scalacOptions ++= {
     if (isSnapshot.value) Nil
     else
@@ -148,7 +153,7 @@ val akkaVersion = "2.6.13"
 lazy val akka = project
   .in(file("akka"))
   .settings(
-    name := "reservoir-akka",
+    name := "reservoir-akka-stream",
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-stream" % akkaVersion,
     ),
