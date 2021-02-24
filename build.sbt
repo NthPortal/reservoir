@@ -144,7 +144,7 @@ lazy val core = project
   )
   .settings(sharedSettings)
 
-val akkaVersion = "2.6.12"
+val akkaVersion = "2.6.13"
 lazy val akka = project
   .in(file("akka"))
   .settings(
