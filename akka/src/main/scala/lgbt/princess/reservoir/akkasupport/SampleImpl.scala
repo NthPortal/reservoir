@@ -5,7 +5,6 @@ import akka.stream.stage.{GraphStageLogic, GraphStageWithMaterializedValue, InHa
 import akka.stream._
 
 import scala.concurrent.{Future, Promise}
-import scala.reflect.ClassTag
 
 /** Implementation for [[Sample]]. */
 private final class SampleImpl[A, B](newSampler: => Sampler[A, B])

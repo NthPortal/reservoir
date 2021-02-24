@@ -126,6 +126,11 @@ val sharedSettings = Seq(
   libraryDependencies ++= Seq(
     "org.scalatest" %% "scalatest" % "3.2.5" % Test,
   ),
+  scalacOptions ++= Seq(
+    "-Xlint",
+    "-feature",
+    "-Werror",
+  ),
   scalacOptions ++= {
     if (isSnapshot.value) Nil
     else
