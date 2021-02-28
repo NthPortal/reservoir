@@ -151,7 +151,7 @@ lazy val core = project
 
 val akkaVersion = "2.6.13"
 lazy val akka = project
-  .in(file("akka"))
+  .in(file("akka-stream"))
   .settings(
     name := "reservoir-akka-stream",
     libraryDependencies ++= Seq(

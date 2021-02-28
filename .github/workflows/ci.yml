@@ -60,7 +60,7 @@ jobs:
         run: 'sbt ++${{ matrix.scala }} compile test:compile'
 
       - name: Compress target directories
-        run: tar cf targets.tar target core/target akka/target project/target
+        run: tar cf targets.tar target core/target akka-stream/target project/target
 
       - name: Upload target directories
         uses: actions/upload-artifact@v2
