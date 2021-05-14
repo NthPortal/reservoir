@@ -124,7 +124,7 @@ val sharedSettings = Seq(
   mimaPreviousArtifacts := Set().map(organization.value %% name.value % _),
   mimaFailOnNoPrevious := true,
   libraryDependencies ++= Seq(
-    "org.scalatest" %% "scalatest" % "3.2.8" % Test,
+    "org.scalatest" %% "scalatest" % "3.2.9" % Test,
   ),
   scalacOptions ++= Seq(
     "-Xlint",
