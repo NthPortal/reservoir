@@ -1,12 +1,12 @@
-ThisBuild / scalaVersion := "2.13.6"
+ThisBuild / scalaVersion    := "2.13.6"
 ThisBuild / autoAPIMappings := true
 
 // publishing info
 inThisBuild(
   Seq(
     organization := "lgbt.princess",
-    homepage := Some(url("https://github.com/NthPortal/reservoir")),
-    licenses := Seq("The Apache License, Version 2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0.txt")),
+    homepage     := Some(url("https://github.com/NthPortal/reservoir")),
+    licenses     := Seq("The Apache License, Version 2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0.txt")),
     developers := List(
       Developer(
         "NthPortal",
@@ -122,7 +122,7 @@ inThisBuild(
 
 val sharedSettings = Seq(
   mimaPreviousArtifacts := Set().map(organization.value %% name.value % _),
-  mimaFailOnNoPrevious := true,
+  mimaFailOnNoPrevious  := true,
   libraryDependencies ++= Seq(
     "org.scalatest" %% "scalatest" % "3.2.9" % Test,
   ),
@@ -172,9 +172,9 @@ lazy val root = project
     akka,
   )
   .settings(
-    name := "reservoir",
+    name                  := "reservoir",
     mimaPreviousArtifacts := Set().map(organization.value %% name.value % _),
-    mimaFailOnNoPrevious := true,
+    mimaFailOnNoPrevious  := true,
     Compile / doc / sources :=
       (Compile / doc / sources).value ++
         (core / Compile / doc / sources).value ++
