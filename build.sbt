@@ -149,7 +149,7 @@ lazy val core = project
   )
   .settings(sharedSettings)
 
-val akkaVersion = "2.6.18"
+val akkaVersion = "2.6.19"
 lazy val akka = project
   .in(file("akka-stream"))
   .settings(
