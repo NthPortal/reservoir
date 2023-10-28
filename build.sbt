@@ -124,7 +124,7 @@ val sharedSettings = Seq(
   mimaPreviousArtifacts := Set().map(organization.value %% name.value % _),
   mimaFailOnNoPrevious  := true,
   libraryDependencies ++= Seq(
-    "org.scalatest" %% "scalatest" % "3.2.11" % Test,
+    "org.scalatest" %% "scalatest" % "3.2.17" % Test,
   ),
   scalacOptions ++= Seq(
     "-Xlint",
@@ -149,7 +149,7 @@ lazy val core = project
   )
   .settings(sharedSettings)
 
-val akkaVersion = "2.6.18"
+val akkaVersion = "2.6.20"
 lazy val akka = project
   .in(file("akka-stream"))
   .settings(
