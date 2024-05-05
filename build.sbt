@@ -1,4 +1,4 @@
-ThisBuild / scalaVersion    := "2.13.6"
+ThisBuild / scalaVersion    := "2.13.14"
 ThisBuild / autoAPIMappings := true
 
 // publishing info

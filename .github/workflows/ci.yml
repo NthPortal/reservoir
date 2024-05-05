@@ -23,7 +23,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        scala: [2.13.6]
+        scala: [2.13.14]
         java:
           - adopt@1.8
           - adopt@1.11
@@ -75,7 +75,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        scala: [2.13.6]
+        scala: [2.13.14]
         java: [adopt@1.8]
     runs-on: ${{ matrix.os }}
     steps:
@@ -127,7 +127,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        scala: [2.13.6]
+        scala: [2.13.14]
         java:
           - adopt@1.8
           - adopt@1.11
@@ -167,7 +167,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        scala: [2.13.6]
+        scala: [2.13.14]
         java: [adopt@1.8]
     runs-on: ${{ matrix.os }}
     steps:
@@ -203,7 +203,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        scala: [2.13.6]
+        scala: [2.13.14]
         java: [adopt@1.8]
     runs-on: ${{ matrix.os }}
     env:
@@ -242,7 +242,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        scala: [2.13.6]
+        scala: [2.13.14]
         java: [adopt@1.8]
     runs-on: ${{ matrix.os }}
     steps:
@@ -278,7 +278,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        scala: [2.13.6]
+        scala: [2.13.14]
         java: [adopt@1.8]
     runs-on: ${{ matrix.os }}
     steps:
