@@ -1,5 +1,5 @@
 addSbtPlugin("com.codecommit"                    % "sbt-github-actions" % "0.13.0")
-addSbtPlugin("com.github.sbt"                    % "sbt-ci-release"     % "1.5.12")
+addSbtPlugin("com.github.sbt"                    % "sbt-ci-release"     % "1.6.0")
 addSbtPlugin("com.typesafe"                      % "sbt-mima-plugin"    % "1.1.3")
 addSbtPlugin("org.scalameta"                     % "sbt-scalafmt"       % "2.5.2")
 addSbtPlugin("com.thoughtworks.sbt-api-mappings" % "sbt-api-mappings"   % "3.0.2")
